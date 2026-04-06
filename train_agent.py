@@ -60,6 +60,9 @@ DEFAULT_TRAINING_VALUES = {
 
 
 class _TrainingDisplay:
+    _RECENT_STATS_LIMIT = 5
+    _SUMMARY_STATIC_LINE_COUNT = 4
+    _SUMMARY_LINES_PER_STAT = 2
     _PHASE_WEIGHTS = {
         "rollout": 55.0,
         "update": 35.0,
@@ -74,7 +77,7 @@ class _TrainingDisplay:
         self.iteration_bar: tqdm | None = None
         self.summary_lines: list[tqdm] = []
         self._current_iteration_index: int | None = None
-        self._recent_stats: deque = deque(maxlen=5)
+        self._recent_stats: deque = deque(maxlen=self._RECENT_STATS_LIMIT)
         self._color = _AnsiColor(enabled=sys.stdout.isatty())
 
     def __enter__(self) -> _TrainingDisplay:
@@ -94,7 +97,7 @@ class _TrainingDisplay:
             dynamic_ncols=True,
             bar_format="{desc}: {percentage:3.0f}%|{bar}| {n:.0f}/{total_fmt} [{elapsed}<{remaining}] {postfix}",
         )
-        for position in range(2, 15):
+        for position in range(2, 2 + self._summary_line_capacity()):
             line = tqdm(total=0, position=position, leave=True, bar_format="{desc}", dynamic_ncols=True)
             line.set_description_str("")
             self.summary_lines.append(line)
@@ -171,13 +174,16 @@ class _TrainingDisplay:
     def _refresh_summary_block(self) -> None:
         if not self.summary_lines:
             return
-        lines = _render_rolling_summary_block(tuple(self._recent_stats), self._color)
-        padded_lines = list(lines)
+        padded_lines = list(_render_rolling_summary_block(tuple(self._recent_stats), self._color))[: len(self.summary_lines)]
         while len(padded_lines) < len(self.summary_lines):
             padded_lines.append("")
         for line_bar, text in zip(self.summary_lines, padded_lines, strict=True):
             line_bar.set_description_str(text)
             line_bar.refresh()
+
+    @classmethod
+    def _summary_line_capacity(cls) -> int:
+        return cls._SUMMARY_STATIC_LINE_COUNT + cls._SUMMARY_LINES_PER_STAT * cls._RECENT_STATS_LIMIT
 
 
 class _AnsiColor:

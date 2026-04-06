@@ -1045,6 +1045,45 @@ class AgentTests(unittest.TestCase):
 
         self.assertIsNone(args.resume)
 
+    def test_training_display_refresh_handles_full_recent_summary(self) -> None:
+        display = train_agent._TrainingDisplay(total_iterations=10)
+
+        class _Line:
+            def __init__(self) -> None:
+                self.text = ""
+
+            def set_description_str(self, text: str) -> None:
+                self.text = text
+
+            def refresh(self) -> None:
+                return None
+
+        display.summary_lines = [_Line() for _ in range(display._summary_line_capacity())]
+        for index in range(display._RECENT_STATS_LIMIT):
+            display._recent_stats.append(
+                SimpleNamespace(
+                    iteration_index=index,
+                    episode_count=16,
+                    example_count=512,
+                    average_total_reward=0.25,
+                    average_steps=120.0,
+                    average_raw_actions=240.0,
+                    rollout_seconds=1.5,
+                    update_seconds=0.8,
+                    benchmark_current_win_rate=0.55,
+                    benchmark_current_elo=1012.0,
+                    league_source_weights={},
+                    average_monopoly_denial_events=0.3,
+                    average_auction_bid_quality=0.4,
+                )
+            )
+
+        display._refresh_summary_block()
+
+        self.assertEqual(display._summary_line_capacity(), len(display.summary_lines))
+        self.assertTrue(any("Recent Iterations" in line.text for line in display.summary_lines))
+        self.assertTrue(any("bench" in line.text for line in display.summary_lines))
+
     def test_environment_computes_gae_for_terminal_episode(self) -> None:
         encoder = ObservationEncoder()
         action_space = MonopolyActionSpace()
