@@ -321,6 +321,12 @@ python train_agent.py --iterations 50
 
 Before running GPU training, make sure you installed a CUDA-enabled PyTorch build in the environment during setup.
 
+For long-running jobs in `nohup`, `tmux`, CI, or redirected logs, use plain log-style output instead of the interactive progress bars:
+
+```bash
+python train_agent.py --iterations 50 --plain_output
+```
+
 Resume from a checkpoint:
 
 ```bash
@@ -338,6 +344,7 @@ Useful options:
 - `--device cpu` or `--device cuda`
 - `--checkpoint-dir .checkpoints`
 - `--checkpoint-interval 5`
+- `--plain_output`: disable tqdm progress bars and emit log-style status lines
 - `--heuristic-bias` or `--no-heuristic-bias`
 - `--league-self-play` or `--no-league-self-play`
 - `--benchmark-interval 10`
@@ -347,6 +354,13 @@ What training writes:
 - periodic checkpoints such as `.checkpoints/iteration_0005.pt`
 - final `.checkpoints/latest.pt`
 - console summaries for rollout, update, and benchmark phases
+
+Plain-output mode writes line-oriented status updates that are easier to capture in files, for example under Ubuntu:
+
+```bash
+nohup python train_agent.py --iterations 200 --plain_output > train.log 2>&1 &
+tail -f train.log
+```
 
 ## Evaluating a Checkpoint
 
@@ -403,13 +417,13 @@ python run_tests.py
 Train from scratch on CPU:
 
 ```bash
-python train_agent.py --iterations 20 --device cpu --threads 2
+python train_agent.py --iterations 20 --device cpu --threads 2 --plain_output
 ```
 
 Resume training on GPU:
 
 ```bash
-python train_agent.py --resume .checkpoints/latest.pt --iterations 20 --device cuda
+python train_agent.py --resume .checkpoints/latest.pt --iterations 20 --device cuda --plain_output
 ```
 
 Evaluate the latest checkpoint:
@@ -428,5 +442,6 @@ python tournament_checkpoints.py .checkpoints/iteration_0020.pt .checkpoints/ite
 
 - The default GUI entry point is `main.py`.
 - Training now starts from scratch by default; use `--resume` only when you actually want checkpoint resume behavior.
+- `--plain_output` is recommended for non-interactive terminals, redirected output, and `nohup` runs.
 - For first-time training on a machine without CUDA, pass `--device cpu` explicitly if you want to avoid any ambiguity.
 - Logs and checkpoints are intentionally local artifacts and are ignored by `.gitignore`.

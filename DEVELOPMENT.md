@@ -58,13 +58,20 @@ python -m pytest tests/test_environment.py tests/test_worker_pool.py
 Train from scratch on CPU:
 
 ```bash
-python train_agent.py --iterations 20 --device cpu --threads 2
+python train_agent.py --iterations 20 --device cpu --threads 2 --plain_output
 ```
 
 Resume training:
 
 ```bash
-python train_agent.py --resume .checkpoints/latest.pt --iterations 20
+python train_agent.py --resume .checkpoints/latest.pt --iterations 20 --plain_output
+```
+
+Run a long training job under Ubuntu with `nohup`:
+
+```bash
+nohup python train_agent.py --iterations 200 --device cpu --threads 4 --plain_output > train.log 2>&1 &
+tail -f train.log
 ```
 
 Evaluate a checkpoint:
@@ -85,6 +92,7 @@ python tournament_checkpoints.py .checkpoints/iteration_0020.pt .checkpoints/ite
 - Frontend and backend logs are written to `logs/frontend.log` and `logs/backend.log`.
 - Use `MONOPOLY_LOG_LEVEL=DEBUG` when you need detailed socket, backend, or GUI logging.
 - Saved checkpoints are written under `.checkpoints/` unless overridden with `--checkpoint-dir`.
+- Use `--plain_output` for non-interactive training runs so stdout stays line-oriented and `tqdm` does not clutter log files.
 
 ## High-Value Test Targets
 
