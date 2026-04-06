@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import io
 from pathlib import Path
 from types import SimpleNamespace
+from contextlib import redirect_stdout
 import tempfile
 import unittest
 
@@ -1045,6 +1047,11 @@ class AgentTests(unittest.TestCase):
 
         self.assertIsNone(args.resume)
 
+    def test_train_agent_parser_supports_plain_output(self) -> None:
+        args = train_agent.build_argument_parser().parse_args(["--plain_output"])
+
+        self.assertTrue(args.plain_output)
+
     def test_training_display_refresh_handles_full_recent_summary(self) -> None:
         display = train_agent._TrainingDisplay(total_iterations=10)
 
@@ -1083,6 +1090,39 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(display._summary_line_capacity(), len(display.summary_lines))
         self.assertTrue(any("Recent Iterations" in line.text for line in display.summary_lines))
         self.assertTrue(any("bench" in line.text for line in display.summary_lines))
+
+    def test_plain_training_display_emits_log_friendly_lines(self) -> None:
+        display = train_agent._PlainTrainingDisplay(total_iterations=10)
+        output = io.StringIO()
+
+        with redirect_stdout(output):
+            display.handle_status(
+                SimpleNamespace(
+                    iteration_index=0,
+                    total_iterations=10,
+                    phase="rollout",
+                    completed=0,
+                    total=4,
+                    message="Collecting self-play episodes",
+                )
+            )
+            display.complete_iteration(
+                SimpleNamespace(
+                    iteration_index=0,
+                    episode_count=16,
+                    example_count=512,
+                    average_total_reward=0.25,
+                    average_steps=120.0,
+                    average_raw_actions=240.0,
+                    benchmark_current_win_rate=0.55,
+                    benchmark_current_elo=1012.0,
+                )
+            )
+
+        rendered = output.getvalue()
+        self.assertIn("iteration_start=1/10", rendered)
+        self.assertIn("phase=rollout", rendered)
+        self.assertIn("iteration_complete iteration=1", rendered)
 
     def test_environment_computes_gae_for_terminal_episode(self) -> None:
         encoder = ObservationEncoder()

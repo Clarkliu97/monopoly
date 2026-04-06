@@ -5,6 +5,7 @@ from collections import deque
 import os
 import shutil
 import sys
+from typing import Any
 from pathlib import Path
 
 if os.name == "nt":
@@ -186,6 +187,75 @@ class _TrainingDisplay:
         return cls._SUMMARY_STATIC_LINE_COUNT + cls._SUMMARY_LINES_PER_STAT * cls._RECENT_STATS_LIMIT
 
 
+class _PlainTrainingDisplay:
+    def __init__(self, total_iterations: int) -> None:
+        self.total_iterations = total_iterations
+        self._current_iteration_index: int | None = None
+        self._last_status_key: tuple[int, str, int, int, str] | None = None
+
+    def __enter__(self) -> _PlainTrainingDisplay:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    def print_config(self, trainer: ParallelSelfPlayTrainer, iterations: int) -> None:
+        config_rows = [
+            ("Device", trainer.policy_config.device),
+            ("Workers", str(trainer.training_config.worker_count)),
+            ("Players", str(trainer.training_config.players_per_game)),
+            ("Iterations", str(iterations)),
+            ("Episodes/Worker", str(trainer.training_config.episodes_per_worker)),
+            ("Max Steps", str(trainer.training_config.max_steps_per_episode)),
+            ("Max Actions", str(trainer.training_config.max_actions_per_episode)),
+            ("Model", trainer.policy_config.model_type),
+            ("Auction Macro", str(trainer.training_config.use_auction_macro_steps)),
+            ("Heuristics", str(trainer.policy_config.use_heuristic_bias)),
+            ("League", str(trainer.training_config.use_league_self_play)),
+            ("Benchmark Int", str(trainer.training_config.benchmark_interval)),
+            ("Heuristic Scale", f"{trainer.current_heuristic_scale():.2f}"),
+            ("Heuristic Sched", trainer.policy_config.heuristic_anneal_schedule),
+            ("GAE", f"{trainer.policy_config.gae_lambda:.2f}"),
+            ("Bootstrap", str(trainer.policy_config.bootstrap_truncated_episodes)),
+        ]
+        self.write(_render_key_value_table("Training Config", config_rows, columns=2))
+
+    def handle_status(self, update) -> None:
+        status_key = (update.iteration_index, update.phase, update.completed, update.total, update.message)
+        if status_key == self._last_status_key:
+            return
+        self._last_status_key = status_key
+
+        if self._current_iteration_index != update.iteration_index:
+            self._current_iteration_index = update.iteration_index
+            self.write(f"iteration_start={update.iteration_index + 1}/{update.total_iterations}")
+
+        should_log = update.completed == 0 or update.total <= 1 or update.completed >= update.total
+        if not should_log:
+            return
+        message_suffix = "" if not update.message else f" message={update.message}"
+        self.write(
+            f"status iteration={update.iteration_index + 1}/{update.total_iterations} phase={update.phase} "
+            f"progress={update.completed}/{max(0, update.total)}{message_suffix}"
+        )
+
+    def complete_iteration(self, stat) -> None:
+        self.write(
+            "iteration_complete "
+            f"iteration={stat.iteration_index + 1} "
+            f"episodes={stat.episode_count} "
+            f"examples={stat.example_count} "
+            f"avg_reward={stat.average_total_reward:.3f} "
+            f"avg_steps={stat.average_steps:.1f} "
+            f"avg_actions={stat.average_raw_actions:.1f} "
+            f"benchmark_win_rate={stat.benchmark_current_win_rate:.3f} "
+            f"benchmark_elo={stat.benchmark_current_elo:.1f}"
+        )
+
+    def write(self, message: str) -> None:
+        print(message)
+
+
 class _AnsiColor:
     def __init__(self, *, enabled: bool) -> None:
         self.enabled = enabled
@@ -261,6 +331,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--benchmark-seed-step", type=int, default=None)
     parser.add_argument("--benchmark-max-steps", type=int, default=None)
     parser.add_argument("--benchmark-players", type=int, default=None)
+    parser.add_argument("--plain_output", action="store_true", help="Use plain log-style output without tqdm progress bars.")
     return parser
 
 
@@ -360,7 +431,8 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     stats: list = []
-    with _TrainingDisplay(args.iterations) as display:
+    display_class: type[_TrainingDisplay | _PlainTrainingDisplay] = _PlainTrainingDisplay if args.plain_output else _TrainingDisplay
+    with display_class(args.iterations) as display:
         display.print_config(trainer, args.iterations)
 
         def _on_iteration_complete(stat) -> None:
