@@ -1,0 +1,14 @@
+# External runtime dependencies
+# Install PyTorch separately before this file so you can choose the correct
+# CPU or CUDA build for your machine.
+
+# Pygame frontend stack.
+pygame-ce
+pygame_gui
+Pillow
+coverage
+numpy
+tqdm
+
+# Install the local package so imports work without setting PYTHONPATH manually.
+-e .
